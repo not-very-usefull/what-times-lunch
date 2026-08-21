@@ -75,15 +75,21 @@
 
       // Already authenticated — remove gate immediately and done
       const saved = localStorage.getItem('wtl-auth');
-      if (saved && USERS[saved]) { gate.remove(); return; }
+      if (saved && USERS[saved]) {
+        gate.remove();
+        const badge = document.getElementById('user-badge');
+        if (badge) badge.textContent = '👤 ' + saved;
+        return;
+      }
 
       function attempt() {
         const u = userInput.value.trim().toLowerCase();
         const p = passInput.value;
         if (USERS[u] && USERS[u] === p) {
           localStorage.setItem('wtl-auth', u);
+          const badge = document.getElementById('user-badge');
+          if (badge) badge.textContent = '👤 ' + u;
           gate.classList.add('fade-out');
-          // Reload after fade so APPS_KEY recalculates with the correct username
           setTimeout(() => location.reload(), 420);
         } else {
           error.textContent = 'Incorrect username or password.';
@@ -652,6 +658,7 @@
 <!-- ── Header ── -->
 <header>
   <div class="logo">What time's <span>lunch?</span> 🌮</div>
+  <div id="user-badge" style="font-size:0.75rem;color:var(--muted);background:var(--bg);padding:4px 10px;border-radius:99px;border:1px solid var(--border);"></div>
   <div class="spacer"></div>
   <div class="api-wrap">
     <label for="api-key-input">Claude API Key</label>
