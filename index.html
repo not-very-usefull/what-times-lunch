@@ -60,38 +60,45 @@
     };
     // ──────────────────────────────────────────────────────────────────────
 
-    (function () {
-      const saved = localStorage.getItem('wtl-auth');
-      if (saved && USERS[saved]) return; // already authenticated
-      document.addEventListener('DOMContentLoaded', () => {
-        const gate      = document.getElementById('pw-gate');
-        const userInput = document.getElementById('pw-username');
-        const passInput = document.getElementById('pw-input');
-        const error     = document.getElementById('pw-error');
-        const btn       = document.getElementById('pw-submit');
-
-        function attempt() {
-          const u = userInput.value.trim().toLowerCase();
-          const p = passInput.value;
-          if (USERS[u] && USERS[u] === p) {
-            localStorage.setItem('wtl-auth', u);
-            gate.classList.add('fade-out');
-            setTimeout(() => gate.remove(), 420);
-          } else {
-            error.textContent = 'Incorrect username or password.';
-            [userInput, passInput].forEach(el => {
-              el.classList.add('shake');
-              setTimeout(() => el.classList.remove('shake'), 400);
-            });
-            passInput.value = '';
-          }
-        }
-        btn.addEventListener('click', attempt);
-        [userInput, passInput].forEach(el =>
-          el.addEventListener('keydown', e => { if (e.key === 'Enter') attempt(); })
-        );
-      });
+    // Clear any legacy auth value that is a password rather than a username
+    (function() {
+      const v = localStorage.getItem('wtl-auth');
+      if (v && !USERS[v]) localStorage.removeItem('wtl-auth');
     })();
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const gate      = document.getElementById('pw-gate');
+      const userInput = document.getElementById('pw-username');
+      const passInput = document.getElementById('pw-input');
+      const error     = document.getElementById('pw-error');
+      const btn       = document.getElementById('pw-submit');
+
+      // Already authenticated — remove gate immediately and done
+      const saved = localStorage.getItem('wtl-auth');
+      if (saved && USERS[saved]) { gate.remove(); return; }
+
+      function attempt() {
+        const u = userInput.value.trim().toLowerCase();
+        const p = passInput.value;
+        if (USERS[u] && USERS[u] === p) {
+          localStorage.setItem('wtl-auth', u);
+          gate.classList.add('fade-out');
+          // Reload after fade so APPS_KEY recalculates with the correct username
+          setTimeout(() => location.reload(), 420);
+        } else {
+          error.textContent = 'Incorrect username or password.';
+          [userInput, passInput].forEach(el => {
+            el.classList.add('shake');
+            setTimeout(() => el.classList.remove('shake'), 400);
+          });
+          passInput.value = '';
+        }
+      }
+      btn.addEventListener('click', attempt);
+      [userInput, passInput].forEach(el =>
+        el.addEventListener('keydown', e => { if (e.key === 'Enter') attempt(); })
+      );
+    });
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
@@ -1990,7 +1997,20 @@ function renderSustainResults(r, url) {
 // ════════════════════════════════════════════════════════════════════════════
 // Application Library — single save point for spec + CV
 // ════════════════════════════════════════════════════════════════════════════
-const APPS_KEY     = 'wtl-applications';
+// Namespace saves by logged-in user so each person has their own applications
+const _currentUser = localStorage.getItem('wtl-auth') || 'guest';
+const APPS_KEY     = `wtl-applications-${_currentUser}`;
+
+// One-time migration: move pre-login saves into owen's account
+(function migrateOldSaves() {
+  const legacy  = localStorage.getItem('wtl-applications');
+  const owenKey = 'wtl-applications-owen';
+  if (legacy && !localStorage.getItem(owenKey)) {
+    localStorage.setItem(owenKey, legacy);
+    localStorage.removeItem('wtl-applications');
+  }
+})();
+
 let currentAppId   = null;
 let cvReview       = null; // store last CV review result so we can save it
 
