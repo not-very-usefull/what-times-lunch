@@ -1379,19 +1379,22 @@ IMPORTANT — keyword matching rules:
 - When in doubt, lean toward "found".
 
 IMPORTANT — scoring rules:
-- Use the FULL 0–100 range without artificial limits. A genuinely strong CV that closely matches the role should score 90–100. Do not cap scores in the high 80s out of caution.
-- Score 90–100: excellent match, minor gaps only.
-- Score 75–89: good match, some meaningful gaps.
-- Score 60–74: moderate match, notable gaps.
-- Below 60: significant misalignment.
-- Be accurate, not conservative. If the CV deserves a 95, give it a 95.
+- Each sub-score is INDEPENDENT. Score what you actually see in that dimension — do not average or anchor scores to each other.
+- Use the FULL 0–100 range. Be precise: 73 is different from 75. Do not round to multiples of 5 or 10.
+- Scoring guide per dimension:
+  - skillsMatch: % of the required technical + soft skills that the CV clearly demonstrates. Count matched vs total, then scale. E.g. 14/18 skills = 78.
+  - experienceMatch: years/depth/seniority alignment. Perfect match = 95+. One level below = 70–80. Two levels = 50–65.
+  - keywordCoverage: % of ATS keywords with at least a near-match in the CV. Count them. E.g. 22/28 = 79.
+  - achievementsImpact: are results quantified? Are there specific outcomes, metrics, impact statements? Many = 85–95. Some = 60–75. Vague/absent = 30–55.
+  - presentation: clarity, structure, length, formatting, grammar. Near-perfect = 90+. Minor issues = 70–85. Structural problems = 40–65.
+- Do NOT default to the 75–87 band out of caution. If a dimension earns 91, write 91. If it earns 54, write 54.
+- Do not include "overallScore" in your JSON — it will be calculated automatically.
 
 Job specification summary:
 ${JSON.stringify(jsSummary, null, 2)}
 
-Return exactly this structure:
+Return exactly this structure (no overallScore field — omit it):
 {
-  "overallScore": <integer 0–100>,
   "scores": {
     "skillsMatch":       { "score": <0–100>, "notes": "<one sentence>" },
     "experienceMatch":   { "score": <0–100>, "notes": "<one sentence>" },
@@ -1446,6 +1449,17 @@ ${cvText_val}`;
   try {
     const data = await callClaude(prompt, apiKey, 'claude-sonnet-4-6', 4096);
     cvReview = safeParseJson(data.content[0].text);
+    // Compute overallScore as a weighted average of subscores (not from Claude, to avoid clustering)
+    if (cvReview.scores && !cvReview.overallScore) {
+      const s = cvReview.scores;
+      const weights = { skillsMatch: 0.30, experienceMatch: 0.30, keywordCoverage: 0.20, achievementsImpact: 0.12, presentation: 0.08 };
+      let total = 0, totalW = 0;
+      for (const [k, w] of Object.entries(weights)) {
+        const v = s[k]?.score;
+        if (typeof v === 'number') { total += v * w; totalW += w; }
+      }
+      cvReview.overallScore = totalW > 0 ? Math.round(total / totalW) : 0;
+    }
     confirmedItems = new Set(); // fresh review = fresh slate
     renderCvResults(cvReview);
     applyAnnotations(cvReview.annotations);
@@ -1559,7 +1573,7 @@ function renderCvResults(r) {
       const location = i?.location ?? '';
       const key      = `missing-${id}`;
       const confirmed = confirmedItems.has(key);
-      const badge    = id ? `<span class="ann-num ann-num-missing">${id}</span>` : '';
+      const badge    = id ? `<span class="ann-num ann-num-missing" data-ann-id="${id}">${id}</span>` : '';
       const locHint  = location ? `<div class="missing-location">→ Add to: ${esc(location)}</div>` : '';
       const btn      = `<button class="confirm-btn${confirmed ? ' is-confirmed' : ''}" data-key="${key}">${confirmed ? '↩ Mark as missing' : '✓ It\'s there'}</button>`;
       return `<li data-key="${key}"${confirmed ? ' class="item-confirmed"' : ''}>${badge}<span class="item-text">${esc(text)}</span>${locHint}${btn}</li>`;
@@ -1577,7 +1591,7 @@ function renderCvResults(r) {
       const id       = i?.id ?? '';
       const key      = `improve-${id}`;
       const confirmed = confirmedItems.has(key);
-      const badge    = id ? `<span class="ann-num ann-num-improve">${id}</span>` : '';
+      const badge    = id ? `<span class="ann-num ann-num-improve" data-ann-id="${id}">${id}</span>` : '';
       const btn      = `<button class="confirm-btn${confirmed ? ' is-confirmed' : ''}" data-key="${key}">${confirmed ? '↩ Still to do' : '✓ Done'}</button>`;
       return `<li data-key="${key}"${confirmed ? ' class="item-confirmed"' : ''}>${badge}<span class="item-text"><span class="improve-section-tag">${esc(i.section||'CV')}</span>${esc(i.suggestion||'')}</span>${btn}</li>`;
     }).join('');
@@ -1662,7 +1676,7 @@ function applyAnnotations(annotations) {
   sorted.forEach(({ id, phrase, type }) => {
     const cls   = type === 'missing' ? 'ann-missing' : 'ann-improve';
     const numCls = type === 'missing' ? 'ann-num-missing' : 'ann-num-improve';
-    const badge = `<span class="ann-num ${numCls}">${id}</span>`;
+    const badge = `<span class="ann-num ${numCls}" data-ann-id="${id}">${id}</span>`;
     const rx = new RegExp('(' + escRx(escHtml(phrase.trim())) + ')', 'gi');
 
     const before = html;
@@ -1681,6 +1695,7 @@ function applyAnnotations(annotations) {
 
   if (anyMatched) {
     document.getElementById('ann-legend').style.display = 'flex';
+    renumberAnnotations();
   }
   if (cvText_val && cvTextPreview.style.display === 'none') {
     cvTextPreview.style.display = 'block';
@@ -1688,6 +1703,25 @@ function applyAnnotations(annotations) {
     cvUploadZone.style.display  = 'none';
     cvOrRow.style.display       = 'none';
   }
+}
+
+// ── Re-number annotation badges so CV order matches right-panel order ─────────
+function renumberAnnotations() {
+  // Scan CV preview for all annotation badges in DOM order (top to bottom)
+  const cvBadges = cvTextPreview.querySelectorAll('.ann-num[data-ann-id]');
+  const idToSeq = {};
+  let seq = 1;
+  cvBadges.forEach(badge => {
+    const origId = String(badge.dataset.annId);
+    if (!(origId in idToSeq)) idToSeq[origId] = seq++;
+    badge.textContent = idToSeq[origId];
+  });
+
+  // Apply same sequential numbers to right-panel badges
+  cvResultsDiv.querySelectorAll('.ann-num[data-ann-id]').forEach(badge => {
+    const origId = String(badge.dataset.annId);
+    if (origId in idToSeq) badge.textContent = idToSeq[origId];
+  });
 }
 
 // ════════════════════════════════════════════════════════════════════════════
