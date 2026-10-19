@@ -1797,23 +1797,23 @@ Return a single JSON object with NO markdown, NO commentary:
 {
   "whyYou": {
     "subtitle": "one-line hook about what makes this company compelling (max 12 words)",
-    "intro": "3-4 sentence draft paragraph the person could adapt — written in first person, specific to this company and role",
-    "keyPoints": ["up to 4 specific, concrete reasons why this company/role is exciting — reference real things from the spec"]
+    "intro": "2-3 sentence draft the person could adapt — first person, specific to this company",
+    "keyPoints": ["up to 3 specific reasons why this company/role is exciting"]
   },
   "whyMe": {
     "subtitle": "one-line hook about their strongest qualification (max 12 words)",
-    "intro": "3-4 sentence draft paragraph about their fit — first person, referencing specific CV experience/skills that match the role",
-    "keyPoints": ["up to 4 specific CV achievements or skills that directly map to what the role requires"]
+    "intro": "2-3 sentence draft about their fit — first person, referencing specific CV experience that matches the role",
+    "keyPoints": ["up to 3 specific CV achievements or skills that directly map to the role"]
   },
   "whyUs": {
     "subtitle": "one-line hook about the mutual fit (max 12 words)",
-    "intro": "3-4 sentence draft paragraph about why this is a great match both ways — first person",
-    "keyPoints": ["up to 4 specific points about shared values, complementary strengths, or mutual benefit"]
+    "intro": "2-3 sentence draft about why this is a great match both ways — first person",
+    "keyPoints": ["up to 3 points about shared values, complementary strengths, or mutual benefit"]
   }
 }`;
 
   try {
-    const data = await callClaude(prompt, apiKey, 'claude-sonnet-4-6', 1500);
+    const data = await callClaude(prompt, apiKey, 'claude-sonnet-4-6', 2048);
     const result = safeParseJson(data.content[0].text);
     renderCoverSections(result);
     coverShowState('results');
